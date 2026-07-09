@@ -26,7 +26,7 @@ mongoose
   .catch((err) => console.error('MongoDB connection error:', err));
 
 // Middlewares
-app.use(cors({ origin: ['http://localhost:5173', 'https://jap-fullstack.vercel.app','https://jain-arogyam-frontend.vercel.app/' ]}));
+app.use(cors({ origin: ['http://localhost:5173', 'https://jap-fullstack.vercel.app','https://jain-arogyam-frontend.vercel.app' ]}));
 app.use(express.json());
 
 // Routes
