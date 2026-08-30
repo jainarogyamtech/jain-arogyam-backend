@@ -18,8 +18,8 @@ const mongo = new MongoClient(process.env.MONGODB_URI);
 const APPWRITE_DB_ID = "67496ef6002bb2655def";
 const COLLECTIONS = [
   { appwriteId: "67531a440000a7821a1b",    mongoCollection: "users" },
-  // { appwriteId: "67667e7a0011d9d73859", mongoCollection: "finalizeddatas" },
-  // { appwriteId: "67496f260013217dd22b", mongoCollection: "appointments" },
+  { appwriteId: "67667e7a0011d9d73859", mongoCollection: "finalizeddatas" },
+  { appwriteId: "67496f260013217dd22b", mongoCollection: "appointments" },
   // add all your collections
 ];
 
