@@ -1,4 +1,4 @@
-// migrate.js to migrate data from appwrite to mongo.
+// diagnose-finalizeddatas.js — find why Mongo has more docs than Appwrite
 import 'dotenv/config';
 import { Client, Databases, Query } from "node-appwrite";
 import { MongoClient } from "mongodb";
@@ -6,80 +6,77 @@ import { MongoClient } from "mongodb";
 const appwrite = new Client()
   .setEndpoint(process.env.APPWRITE_ENDPOINT)
   .setProject(process.env.APPWRITE_PROJECT_ID)
-  .setKey(process.env.APPWRITE_API_KEY); // server key, not client
+  .setKey(process.env.APPWRITE_API_KEY);
 
 const DB_NAME = process.env.MONGODB_DB_NAME;
-
 const databases = new Databases(appwrite);
-
 const mongo = new MongoClient(process.env.MONGODB_URI);
 
-// --- CONFIG ---
 const APPWRITE_DB_ID = "67496ef6002bb2655def";
-const COLLECTIONS = [
-  { appwriteId: "67531a440000a7821a1b",    mongoCollection: "users" },
-  { appwriteId: "67667e7a0011d9d73859", mongoCollection: "finalizeddatas" },
-  { appwriteId: "67496f260013217dd22b", mongoCollection: "appointments" },
-  // add all your collections
-];
+const APPWRITE_COL_ID = "67667e7a0011d9d73859";
+const MONGO_COLLECTION = "finalizeddatas";
 
-// Paginate through ALL docs (Appwrite limit is 25 by default, max 100)
-async function fetchAll(dbId, colId) {
-  const all = [];
+async function fetchAllIds() {
+  const ids = new Set();
   let cursor = null;
-
   while (true) {
     const queries = [Query.limit(100)];
     if (cursor) queries.push(Query.cursorAfter(cursor));
-
-    const res = await databases.listDocuments(dbId, colId, queries);
-    all.push(...res.documents);
-
-    if (res.documents.length < 100) break; // last page
+    const res = await databases.listDocuments(APPWRITE_DB_ID, APPWRITE_COL_ID, queries);
+    res.documents.forEach((d) => ids.add(d.$id));
+    if (res.documents.length < 100) break;
     cursor = res.documents.at(-1).$id;
   }
-
-  return all;
+  return ids;
 }
 
-// Transform: strip Appwrite system fields, remap $id → _id
-function transform(doc) {
-  const { $id, $collectionId, $databaseId, $createdAt, $updatedAt, $permissions, ...rest } = doc;
-  return {
-    _id: $id,           // preserve original ID for reference integrity
-    createdAt: new Date($createdAt),
-    updatedAt: new Date($updatedAt),
-    ...rest,
-  };
-}
-
-async function migrate() {
+async function main() {
   await mongo.connect();
   const db = mongo.db(DB_NAME);
+  const collection = db.collection(MONGO_COLLECTION);
 
-  for (const { appwriteId, mongoCollection } of COLLECTIONS) {
-    console.log(`\n→ Migrating: ${mongoCollection}`);
+  console.log("Fetching all current Appwrite IDs...");
+  const appwriteIds = await fetchAllIds();
+  console.log(`  Appwrite has ${appwriteIds.size} unique documents\n`);
 
-    const docs = await fetchAll(APPWRITE_DB_ID, appwriteId);
-    console.log(`  Fetched: ${docs.length} documents`);
+  console.log("Checking MongoDB...");
+  const mongoTotal = await collection.countDocuments();
+  console.log(`  Mongo has ${mongoTotal} documents total`);
 
-    if (docs.length === 0) continue;
+  // Check for duplicate _id values (shouldn't be possible since _id is the primary key,
+  // but worth ruling out if a different field was meant to be unique)
+  const dupCheck = await collection
+    .aggregate([{ $group: { _id: "$_id", count: { $sum: 1 } } }, { $match: { count: { $gt: 1 } } }, { $limit: 5 }])
+    .toArray();
+  console.log(`  Duplicate _id groups found: ${dupCheck.length} (should always be 0 — _id is unique in Mongo)`);
 
-    const transformed = docs.map(transform);
+  // Count Mongo docs whose _id does NOT exist in the current Appwrite set —
+  // these are "orphaned" / stale docs from old runs or deleted Appwrite records
+  const allMongoIds = await collection.find({}, { projection: { _id: 1 } }).toArray();
+  const orphaned = allMongoIds.filter((d) => !appwriteIds.has(String(d._id)));
+  console.log(`  Mongo docs with no matching Appwrite $id: ${orphaned.length}`);
 
-    // ordered: false → don't stop on duplicate key, useful for reruns
-    try {
-      await db.collection(mongoCollection).insertMany(transformed, { ordered: false });
-      console.log(`  ✓ Inserted into MongoDB`);
-    } catch (err) {
-      if (err.code === 11000 || err.writeErrors) {
-    console.log(`  ✓ Inserted new docs, skipped ${err.writeErrors?.length ?? 0} duplicates`);
-  } else throw err;
-    }
+  if (orphaned.length > 0) {
+    console.log("\n  Sample of orphaned _id values (first 10):");
+    orphaned.slice(0, 10).forEach((d) => console.log(`    ${d._id}`));
+
+    // Pull a couple full sample docs to inspect their shape/timestamps
+    const samples = await collection
+      .find({ _id: { $in: orphaned.slice(0, 3).map((d) => d._id) } })
+      .toArray();
+    console.log("\n  Sample orphaned documents (check createdAt/updatedAt for clues on when they were inserted):");
+    samples.forEach((d) => console.log("   ", JSON.stringify(d, null, 2)));
   }
 
-  await mongo.client?.close?.();
-  console.log("\n✅ Migration complete");
+  console.log(
+    `\nSummary: Appwrite=${appwriteIds.size}, Mongo=${mongoTotal}, Orphaned-in-Mongo=${orphaned.length}, ` +
+      `Expected-if-clean=${appwriteIds.size}`
+  );
+
+  await mongo.close();
 }
 
-migrate().catch(console.error);
+main().catch((err) => {
+  console.error("💥 Diagnostic failed:", err);
+  process.exit(1);
+});

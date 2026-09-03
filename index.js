@@ -18,15 +18,23 @@ dotenv.config();
 
 const app  = express();
 const PORT = process.env.PORT || 5001;
-
+    
 // MongoDB connection
 mongoose
   .connect(envt_imports.mongodbUri)
   .then(() => console.log('MongoDB connected'))
   .catch((err) => console.error('MongoDB connection error:', err));
 
-// Middlewares
-app.use(cors({ origin: ['http://localhost:5173', 'https://jap-fullstack.vercel.app','https://jain-arogyam-frontend.vercel.app' ]}));
+// Middlewares , CORS updated
+app.use(cors({
+  origin: [
+    'http://localhost:5173',
+    'https://jap-fullstack.vercel.app',
+    'https://jain-arogyam-frontend.vercel.app',
+    'https://www.jainarogyam.in',
+    'https://jainarogyam.in'
+  ]
+}));
 app.use(express.json());
 
 // Routes
