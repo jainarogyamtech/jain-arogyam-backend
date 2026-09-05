@@ -33,7 +33,9 @@ app.use(cors({
     'https://jap-fullstack.vercel.app',
     'https://jain-arogyam-frontend.vercel.app',
     'https://jain-arogyam-frontend-staging.vercel.app',
+    'https://www.test.jainarogyam.in',
     'https://www.jainarogyam.in',
+    'https://test.jainarogyam.in',
     'https://jainarogyam.in'
   ]
 }));
