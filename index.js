@@ -19,6 +19,7 @@ dotenv.config();
 const app  = express();
 const PORT = process.env.PORT || 5001;
     
+// Adding test envt.
 // MongoDB connection
 mongoose
   .connect(envt_imports.mongodbUri)
