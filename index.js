@@ -32,6 +32,7 @@ app.use(cors({
     'http://localhost:5173',
     'https://jap-fullstack.vercel.app',
     'https://jain-arogyam-frontend.vercel.app',
+    'https://jain-arogyam-frontend-staging.vercel.app',
     'https://www.jainarogyam.in',
     'https://jainarogyam.in'
   ]
